@@ -1,4 +1,4 @@
-#include <ros/ros.h> // 
+#include <ros/ros.h>
 #include <DEP/prm.h>
 #include <DEP/multi_astar.h>
 #include <visualization_msgs/Marker.h>
@@ -19,19 +19,19 @@
 #include <iostream>
 #include <nlopt.hpp>
 #include <iostream>
-using namespace std::chrono; // Anythings related to time
-using namespace message_filters; // For time synchronizer in ROS, Subscriber and TimeSynchronizer from here
-ros::Publisher map_vis_pub; // Publisher for map visualization, used in rviz for topic /map_vis (visualization_msgs::MarkerArray)
-ros::Publisher goal_pub; // Publisher for goal visualization topic /goal (visualization_msgs::Marker)
-ros::Publisher path_vis_pub; // Publisher for path visualization topic /path_vis (visualization_msgs::MarkerArray)
-ros::Publisher plan_vis_pub; // Publisher for plan visualization topic /plan_vis (visualization_msgs::MarkerArray)
-ros::Publisher old_plan_vis_pub; // Publisher for old plan visualization topic /old_plan_vis (visualization_msgs::MarkerArray)
+using namespace std::chrono;
+using namespace message_filters;
+ros::Publisher map_vis_pub;
+ros::Publisher goal_pub;
+ros::Publisher path_vis_pub;
+ros::Publisher plan_vis_pub;
+ros::Publisher old_plan_vis_pub;
 
-AbstractOcTree* abtree; // Abstract OcTree, what is Octree? http://docs.ros.org/en/noetic/api/octomap/html/classoctomap_1_1OcTree.html
-OcTree* tree_ptr; // Pointer to OcTree
-voxblox::EsdfServer* voxblox_server_ptr; // Pointer to voxblox server, what is voxblox? https://voxblox.readthedocs.io/en/latest/pages/How-Does-ESDF-Generation-Work.html
+AbstractOcTree* abtree;
+OcTree* tree_ptr;
+voxblox::EsdfServer* voxblox_server_ptr;
 PRM* roadmap;
-Node* last_goal; 
+Node* last_goal;
 std::ofstream optimization_data;
 std::ofstream replan_data;
 
@@ -77,18 +77,12 @@ std::vector<Node*>& improvePath(std::vector<Node*> &path, int path_idx, OcTree &
 std::vector<Node*> getGoalCandidates(PRM* roadmap);
 std::vector<Node*> findBestPath(PRM* roadmap, Node* start, std::vector<Node*> goal_candidates, OcTree& tree, bool replan);
 bool checkNextGoalCollision(Node current_pose, DEP::Goal next_goal, OcTree& tree);
-
-// Optimization related functions
 double objective_function(const std::vector<double> &x, std::vector<double> &grad, void *my_func_data);
 std::vector<Node*> optimize_path(std::vector<Node*> path, OcTree* tree_ptr, voxblox::EsdfServer* voxblox_server, double current_yaw);
-
-//Distance and safety related functions
 double findDistanceToWall(double x, double y, double z, voxblox::EsdfServer &voxblox_server);
 bool checkPathCollision(std::vector<Node*> &path, OcTree &tree);
 bool minDistanceCondition(std::vector<Node*> &path);
 bool sensorConditionPath(std::vector<Node*> &path);
-
-// Path evaluation related functions
 double calculatePathTime(std::vector<Node*> &path, double current_yaw, double linear_velocity, double angular_velocity);
 double calculatePathObstacleDistance(std::vector<Node*> &path, voxblox::EsdfServer &voxblox_server, OcTree &tree);
 double calculatePathGain(std::vector<Node*> path, OcTree& tree);
@@ -107,18 +101,17 @@ Node collision_node;
 auto start_time_total = high_resolution_clock::now();
 double least_distance = 10000;
 void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octomap::ConstPtr& bmap){
-	abtree = octomap_msgs::binaryMsgToMap(*bmap); // Convert binary map to octree
+	abtree = octomap_msgs::binaryMsgToMap(*bmap);
 	tree_ptr = dynamic_cast<OcTree*>(abtree);
-	tree_ptr->setResolution(RES); 
-	x = odom->pose.pose.position.x; // Get x position from odometry and similar y,z
+	tree_ptr->setResolution(RES);
+	x = odom->pose.pose.position.x;
 	y = odom->pose.pose.position.y;
 	z = odom->pose.pose.position.z;
-	current_pose.p.x() = x; // Update current pose xyz
+	current_pose.p.x() = x;
 	current_pose.p.y() = y;
 	current_pose.p.z() = z;
-
 	// tree_ptr->writeBinary("/home/zhefan/catkin_ws/src/DEP/src/test/cafe_octree.bt");
-	geometry_msgs::Quaternion quat = odom->pose.pose.orientation; // Oruaternion from odometry, later used to get yaw(rotation around z) 
+	geometry_msgs::Quaternion quat = odom->pose.pose.orientation;
 	tf2::Quaternion tf_quat;
 	double current_roll, current_pitch, current_yaw;
 	tf2::Matrix3x3(tf_quat).getRPY(current_roll, current_pitch, current_yaw);
@@ -128,7 +121,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 	// Check for collision
 	if (not first_time and not no_replan){
-		bool has_collision = checkNextGoalCollision(current_pose, next_goal, *tree_ptr); // checkNextGoalCollision checks if the next goal is in collision, stuff which can be optmized
+		bool has_collision = checkNextGoalCollision(current_pose, next_goal, *tree_ptr);
 		if (has_collision){
 			cout << "COLLISION HAPPENS! NEED REPLANNING" << endl;
 			collision_node.p.x() = next_goal.x;
@@ -141,15 +134,15 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	}
 
 	// check if we already reach the next goal
-	reach = isReach(odom, next_goal); // isReach will check absolute distance between current pose and next goal, if less than delta, return true
+	reach = isReach(odom, next_goal);
 	if (reach){
 		// cout << "reach" << endl;
-		if (path_idx >= path.size()){ // I guess path_idx idx of curr goal, where is path defined?
+		if (path_idx >= path.size()){
 			new_plan = true;
 			// cout << "new plan" << endl;
 		}
 		else{
-			next_goal = getNextGoal(path, path_idx, odom); // 
+			next_goal = getNextGoal(path, path_idx, odom);
 			++path_idx;
 		}
 	}
@@ -157,15 +150,15 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	// Make new plan
 	if (new_plan){
 		// WHen we have new plan, we set it to default value
-		Node* start; // Start node will be used to find the nearest node to current pose
-		if (first_time){ 
-			roadmap = new PRM ();	///// PRM get the roadmap
+		Node* start;
+		if (first_time){
+			roadmap = new PRM ();	
 		}
 		cout << "==============================" << count_iteration << "==============================" << endl;
 		auto start_time = high_resolution_clock::now();
 		if (first_time){
-			roadmap = buildRoadMap(*tree_ptr, roadmap, path,  NULL, map_vis_array); // Build roadmap coming from DEP/prm.h will give map
-			start = findStartNode(roadmap, &current_pose, *tree_ptr); // using kdtree to find the nearest node to current pose
+			roadmap = buildRoadMap(*tree_ptr, roadmap, path,  NULL, map_vis_array);
+			start = findStartNode(roadmap, &current_pose, *tree_ptr);
 			first_time = false;
 		}
 		else{
@@ -178,7 +171,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			else{
 				count_no_increase = 0;
 			}
-			if (count_no_increase >= 30){ // If we are not getting new nodes, we stop the exploration, get the stats
+			if (count_no_increase >= 30){
 				auto stop_time_total = high_resolution_clock::now();
 				auto duration_total = duration_cast<microseconds>(stop_time_total - start_time_total);
 				cout << "Total: "<< duration_total.count()/1e6 << " seconds | " << "Exploration Terminates!!!!!!!!!!!" << endl;
@@ -209,15 +202,15 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		
 		auto start_time_search = high_resolution_clock::now();
 		// cout << "here3" <<endl;
-		std::vector<Node*> goal_candidates = getGoalCandidates(roadmap); // Get goal candidates, priority queue approach, contains Node*, which has number of voxels larger than 0.5 maximum
+		std::vector<Node*> goal_candidates = getGoalCandidates(roadmap);
 		// cout << "here4" <<endl;
-		path = findBestPath(roadmap, start, goal_candidates, *tree_ptr, replan); // Find best path based on collision node, score and distance
-		old_path = path; // old path is the path before optimization
+		path = findBestPath(roadmap, start, goal_candidates, *tree_ptr, replan);
+		old_path = path;
 		last_goal = *(path.end()-1);	
 		// cout << "here5" <<endl;
 		auto stop_time_search = high_resolution_clock::now();
 		if (path.size() >= 3){
-			path = optimize_path(path, tree_ptr, voxblox_server_ptr, current_yaw); // Use non-linear optimization to optimize the path, get score, discussed later
+			path = optimize_path(path, tree_ptr, voxblox_server_ptr, current_yaw);
 			// // cout << "old path size: " << old_path.size() << endl;
 			// // cout << "new path size: " << path.size() << endl;
 			// // cout << "old_path last: " << old_path[old_path.size()-1]->p << endl;
@@ -240,7 +233,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			// optimization_data << " " << new_path_length << endl;
 		}
 		
-		auto duration_search = duration_cast<microseconds>(stop_time_search - start_time_search); // Time taken for search, for eg. duration in microseconds
+		auto duration_search = duration_cast<microseconds>(stop_time_search - start_time_search);
 		cout << "Time used for search is: " << duration_search.count()/1e6 << " Seconds" << endl;
 		total_path_length += calculatePathLength(path);
 		total_distance_to_obstacle += calculateTotalPathObstacleDistance(path, *voxblox_server_ptr, *tree_ptr);
@@ -264,7 +257,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 		path_idx = 0;
 		if (path.size() != 0){
-			next_goal = getNextGoal(path, path_idx, odom); // corresponding path_idx ka x,y,z,yaw, linear & angular velocity
+			next_goal = getNextGoal(path, path_idx, odom);
 			reach = false;
 			++path_idx;
 		}
@@ -301,14 +294,14 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// ====================================================================
 		
 	}
-	else if (replan){ // Similar if we need to replan, when 1st time no replan, then we replan do all the stuff above again
+	else if (replan){
 		auto replan_start_time = high_resolution_clock::now();
 
 		// get goal candidates
 		std::vector<Node*> goal_candidates = getGoalCandidates(roadmap);
 
 		// Find start 
-		Node* start = findStartNode(roadmap, &current_pose, *tree_ptr); // 
+		Node* start = findStartNode(roadmap, &current_pose, *tree_ptr); 
 
 		// Find best path based on collision node
 		path = findBestPath(roadmap, start, goal_candidates, *tree_ptr, replan);
@@ -376,7 +369,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 		// ====================================================================
 	}
-	else{ // for all other cases, we just keep on publishing the map, goal and path using the old_plan_markers, plan_markers, path_marker
+	else{
 		std::vector<visualization_msgs::Marker> plan_vis_array;
 		std::vector<visualization_msgs::Marker> old_plan_vis_array;
 		std::vector<geometry_msgs::Point> path_vis_vector;
@@ -535,47 +528,45 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 		
 	}
-	gainCache.markRegionModified(point3d(x, y, z), dmax*0.25);
-	static int iteration_count = 0;
-	iteration_count++;
-	if(iteration_count % 100 == 0) {  // Print stats every 100 iterations
-		printGainCacheStats();}
 	delete abtree;
+	
+	
+	
 }
  
 
 int main(int argc, char** argv){
-	ros::init(argc, argv, "map_visualizer"); // Initialize ROS node named map_visualizer
-	ros::NodeHandle nh; // public node handle
-	ros::NodeHandle nh_private("~"); // private node handle
-	voxblox_server_ptr = new voxblox::EsdfServer(nh, nh_private); // voxblox server, used for Eucledian signed distance field, used for distancecalculation & mapping
+	ros::init(argc, argv, "map_visualizer");
+	ros::NodeHandle nh;
+	ros::NodeHandle nh_private("~");
+	voxblox_server_ptr = new voxblox::EsdfServer(nh, nh_private);
 	// Eigen::Vector3d p_test (0.3, 6, 1);
 	// double distance = 0;
 
 	// ros::Subscriber sub = n.subscribe("octomap_binary", 100, callback);
-	map_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("map_vis_array", 0); // Advertise map visualization topic /map_vis_array (visualization_msgs::MarkerArray) similar for others
+	map_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("map_vis_array", 0);
 	goal_pub = nh.advertise<DEP::Goal>("goal", 0);
 	path_vis_pub = nh.advertise<visualization_msgs::Marker>("path_vis_array", 0);
 	plan_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("plan_vis_array", 0);
 	old_plan_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("old_plan_vis_array", 0);
 
-	message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odom", 100); // Subscriber for odometry topic /odom, will be used to 
+	message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "odom", 100);
 	message_filters::Subscriber<octomap_msgs::Octomap> map_sub(nh, "octomap_binary", 100);
-	typedef sync_policies::ApproximateTime<nav_msgs::Odometry, octomap_msgs::Octomap> MySyncPolicy; // Approximate time synchronizer
-	Synchronizer<MySyncPolicy> sync (MySyncPolicy(100), odom_sub, map_sub); // Synchronizer for odometry and octomap, will be used to sync the data
-	sync.registerCallback(boost::bind(&callback, _1, _2)); // Register the callback function
-	ros::Rate loop_rate(10); // Loop rate for the main loop
+	typedef sync_policies::ApproximateTime<nav_msgs::Odometry, octomap_msgs::Octomap> MySyncPolicy;
+	Synchronizer<MySyncPolicy> sync (MySyncPolicy(100), odom_sub, map_sub);
+	sync.registerCallback(boost::bind(&callback, _1, _2));
+	ros::Rate loop_rate(10);
 	
 	// optimization_data.open("/home/zhefan/Desktop/Optimization_Data/tunnel/optimization_single/tunnel_opt3.txt");
 	// optimization_data.open("/home/zhefan/Desktop/optimization_revise/tunnel/optimization_single/tunnel_opt3.txt");
 	// optimization_data.open("/home/zhefan/Desktop/optimization_revise/auditorium/optimization_single/auditorium_opt3.txt");
 	// replan_data.open("/home/zhefan/Desktop/Replan_Data_New/DEP/replan_data1.txt");
 	while (ros::ok()){
-		map_vis_pub.publish(map_markers);	// Publish map visualization data
+		map_vis_pub.publish(map_markers);	
 		goal_pub.publish(next_goal);
 		plan_vis_pub.publish(plan_markers);
-		if (path != old_path){ // If path is not same as old path, publish the old path
-			old_plan_vis_pub.publish(old_plan_markers); 
+		if (path != old_path){
+			old_plan_vis_pub.publish(old_plan_markers);
 		}
 		// voxblox_server.saveMap("/home/zhefan/catkin_ws/src/DEP/src/test/cafe_voxblox.vxblx");
 		// voxblox_server.loadMap("/home/zhefan/catkin_ws/src/DEP/src/test/cafe_voxblox.vxblx");
@@ -606,7 +597,7 @@ int main(int argc, char** argv){
 		// optimization_data_sperate.open("/home/zhefan/Desktop/optimization_revise/tunnel/non_optimization/tunnel_nonopt_data3.txt");
 		// optimization_data_sperate.open("/home/zhefan/Desktop/optimization_revise/auditorium/optimization/auditorium_opt_data3.txt");
 		// optimization_data_sperate.open("/home/zhefan/Desktop/optimization_revise/auditorium/non_optimization/auditorium_nonopt_data1.txt");
-		auto stop_time_total = high_resolution_clock::now(); // Print the stats here for each iteration performance monitoring
+		auto stop_time_total = high_resolution_clock::now();
 		auto total_duration = duration_cast<microseconds>(stop_time_total - start_time_total);
 		total_time = total_duration.count()/1e6;
 		optimization_data_sperate << "Total Exploration Time: " << total_time << endl;

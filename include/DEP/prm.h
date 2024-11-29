@@ -5,8 +5,7 @@
 #include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
 #include <voxblox_ros/esdf_server.h>
-#include <ros/ros.h>
-#include <chrono>
+
 
 
 // Depth CAMERA
@@ -18,119 +17,6 @@ double dmax = 1.0;
 bool VISUALIZE_MAP = true;
 // static std::vector<geometry_msgs::Point> DEFAULT_VECTOR;
 static std::vector<visualization_msgs::Marker> DEFAULT_VECTOR;
-
-
-
-// Add performance tracking
-struct PerformanceStats {
-    int cache_hits = 0;
-    int cache_misses = 0;
-    double total_gain_calc_time = 0;
-};
-
-static PerformanceStats perfStats;
-
-class GainCache {
-private:
-    struct CachedValue {
-        double timestamp;
-        double gain;
-        std::map<double, int> yaw_num_voxels;
-    };
-    
-    struct MapCell {
-        double lastModifiedTime;
-        bool isModified;
-    };
-    
-    double cellSize;
-    std::unordered_map<size_t, CachedValue> nodeCache;
-    std::unordered_map<size_t, MapCell> mapGrid;
-    
-    size_t hashPosition(const point3d& p) {
-        return (static_cast<size_t>(p.x() / cellSize) * 73856093) ^
-               (static_cast<size_t>(p.y() / cellSize) * 19349663) ^
-               (static_cast<size_t>(p.z() / cellSize) * 83492791);
-    }
-
-public:
-    GainCache(double cs = 2.0) : cellSize(cs) {}
-    
-    void markRegionModified(const point3d& center, double radius) {
-        double t = ros::Time::now().toSec();
-        for(double x = center.x() - radius; x <= center.x() + radius; x += cellSize) {
-            for(double y = center.y() - radius; y <= center.y() + radius; y += cellSize) {
-                for(double z = center.z() - radius; z <= center.z() + radius; z += cellSize) {
-                    point3d p(x, y, z);
-                    if(p.distance(center) <= radius) {
-                        size_t hash = hashPosition(p);
-                        mapGrid[hash] = {t, true};
-                    }
-                }
-            }
-        }
-    }
-    
-    bool isRegionUnchanged(const point3d& p, double radius, double maxAge) {
-        double currentTime = ros::Time::now().toSec();
-        for(double x = p.x() - radius; x <= p.x() + radius; x += cellSize) {
-            for(double y = p.y() - radius; y <= p.y() + radius; y += cellSize) {
-                for(double z = p.z() - radius; z <= p.z() + radius; z += cellSize) {
-                    size_t hash = hashPosition(point3d(x,y,z));
-                    auto it = mapGrid.find(hash);
-                    if(it != mapGrid.end() && 
-                       it->second.isModified && 
-                       currentTime - it->second.lastModifiedTime < maxAge) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
-    }
-    
-    bool getCachedGain(Node* node, double maxAge, double& cachedGain, 
-                      std::map<double, int>& cachedYawVoxels) {
-        size_t hash = hashPosition(node->p);
-        auto it = nodeCache.find(hash);
-        
-        if(it != nodeCache.end()) {
-            double currentTime = ros::Time::now().toSec();
-            if(currentTime - it->second.timestamp < maxAge &&
-               isRegionUnchanged(node->p, dmax, maxAge)) {
-                cachedGain = it->second.gain;
-                cachedYawVoxels = it->second.yaw_num_voxels;
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    void updateCache(Node* node, double gain, 
-                    const std::map<double, int>& yawVoxels) {
-        size_t hash = hashPosition(node->p);
-        nodeCache[hash] = {
-            ros::Time::now().toSec(),
-            gain,
-            yawVoxels
-        };
-    }
-};
-
-// Add global gainCache instance
-static GainCache gainCache;
-
-void printGainCacheStats() {
-    std::cout << "\nGain Cache Performance:\n"
-              << "Cache hits: " << perfStats.cache_hits << "\n"
-              << "Cache misses: " << perfStats.cache_misses << "\n"
-              << "Hit rate: " << (double)perfStats.cache_hits / 
-                                (perfStats.cache_hits + perfStats.cache_misses) * 100 << "%\n"
-              << "Total gain calc time: " << perfStats.total_gain_calc_time << "s\n"
-              << std::endl;
-}
-
-
 
 std::vector<double> generate_yaws(int n){
 	std::vector<double> yaws;
@@ -347,24 +233,6 @@ bool isInFOV(const OcTree& tree, point3d p, point3d u, double dmax){
 }
 
 double calculateUnknown(const OcTree& tree, Node* n, double dmax){
-	auto start = std::chrono::high_resolution_clock::now();
-    
-    // Try cache first
-    double cachedGain;
-    std::map<double, int> cachedYawVoxels;
-    if(gainCache.getCachedGain(n, 5, cachedGain, cachedYawVoxels)) {
-        perfStats.cache_hits++;
-        n->yaw_num_voxels = cachedYawVoxels;
-        return cachedGain;
-    }
-    
-    perfStats.cache_misses++;
-
-    // Early termination for out-of-bounds
-    if(n->p.z() < env_z_min || n->p.z() > env_z_max) {
-        return 0.0;
-    }
-
 	// Position:
 	point3d p = n->p;
 	// Possible range
@@ -448,11 +316,6 @@ double calculateUnknown(const OcTree& tree, Node* n, double dmax){
 	// cout << "Total Surface Frontier: " << count_total_surface_frontier << endl;
 	// cout << "+----------------------------+" << endl;
 	n->yaw_num_voxels = yaw_num_voxels;
-
-	gainCache.updateCache(n, count_total_unknown, n->yaw_num_voxels);
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    perfStats.total_gain_calc_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000.0;
 	return count_total_unknown;
 }
 
@@ -489,6 +352,14 @@ bool sensorRangeCondition(Node* n1, Node* n2){
 	}
 }
 
+// Added for adaptive threshold. Basically this will 
+double getAdaptiveThreshold(Node* n , PRM* map){
+	double base_threshold = 0.8;
+	double local_info_gain = n->num_voxels;
+	double max_info = map->getMaxUnknown();
+
+	return base_threshold * (1.0 - (local_info_gain/max_info)*0.5); /// iska mtlb yeh hai ki agar local info gain zyada hai toh threshold kam hoga, toh zyada nodes add honge
+}
 
 PRM* buildRoadMap(OcTree &tree, 
 				  PRM* map,
@@ -530,7 +401,10 @@ PRM* buildRoadMap(OcTree &tree,
 				Node* nn = map->nearestNeighbor(n);
 				distance_to_nn = n->p.distance(nn->p);
 				// cout << "least distance" <<distance_to_nn << endl;
-				if (distance_to_nn < distance_thresh){
+				// if (distance_to_nn < distance_thresh){
+				//// Adaptive Threshold, if the distance is less than the threshold, then we will not add the node, otherwise we will add the node
+				//// Areas with high information gain, allow desne sampling
+				if (distance_to_nn < getAdaptiveThreshold(n, map)){
 					++count_failure;
 					delete n;
 				}
@@ -687,7 +561,7 @@ PRM* buildRoadMap(OcTree &tree,
 		}
 		n->new_node = false;
 
-		if (n->num_voxels>max_unknown){
+		if (n->num_voxels>max_unknown){ // Update max unknown going to getMaxUnknown, max unknown is coming from n, what is n? n is Node in KDTree class
 			max_unknown = n->num_voxels;
 		}
 		map->addGoalPQ(n);
@@ -793,5 +667,3 @@ PRM* buildRoadMap(OcTree &tree,
 
 
 // ===================Visualization============================
-
-

@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ROS: map_vis debug",  // Name shown in Debug dropdown
+            "type": "cppdbg",              // C/C++ debugging
+            "request": "launch",           // Launch a new process (vs "attach" to running one)
+            
+            // Path to your compiled executable inside Docker container
+            "program": "/root/catkin_ws/devel/lib/DEP/map_vis",
+            
+            "args": [],                    // Command line arguments if needed
+            "stopAtEntry": false,          // Don't stop at program entry point
+            
+            // Working directory inside Docker container
+            "cwd": "/root/catkin_ws",
+            
+            // Environment variables needed by ROS
+            "environment": [
+                {
+                    "name": "ROS_MASTER_URI",
+                    "value": "http://localhost:11311"
+                }
+            ],
+            "externalConsole": false,      // Don't launch external terminal
+            "MIMode": "gdb",              // Use GDB debugger
+            
+            // GDB configuration
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

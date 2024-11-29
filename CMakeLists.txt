@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(PkgConfig REQUIRED)
+find_package(OpenCV REQUIRED)
 pkg_check_modules(NLOPT nlopt)
 if(NOT NLOPT_FOUND)
   message(WARNING "NLopt not found via pkg-config, trying alternative path")
@@ -142,7 +143,7 @@ include_directories(
   # "/home/zhefan/Desktop/nlopt/build"
   ${NLOPT_INCLUDE_DIRS}
 )
-
+include_directories(${OpenCV_INCLUDE_DIRS})
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/DEP.cpp
@@ -184,7 +185,8 @@ add_dependencies(map_vis ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_T
 # target_link_libraries(test_prm ${catkin_LIBRARIES})
 target_link_libraries(map_vis ${catkin_LIBRARIES} 
 						# "/home/zhefan/Desktop/nlopt/build/libnlopt.so")
-            ${NLOPT_LIBRARIES})
+            ${NLOPT_LIBRARIES}
+            ${OpenCV_LIBRARIES})
 # target_link_libraries(test_tsdf ${catkin_LIBRARIES} 
 #                        "/opt/gurobi902/linux64/lib/libgurobi_c++.a"
 #                        "/opt/gurobi902/linux64/lib/libgurobi90.so")

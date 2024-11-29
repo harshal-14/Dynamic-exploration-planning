@@ -1,0 +1,18 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "catkin_make",        // Name of the task
+            "type": "shell",               // Run as shell command
+            
+            // The actual build command inside Docker container
+            "command": "cd /root/catkin_ws && catkin_make -DCMAKE_BUILD_TYPE=Debug",
+            
+            // Make this the default build task (Ctrl+Shift+B)
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

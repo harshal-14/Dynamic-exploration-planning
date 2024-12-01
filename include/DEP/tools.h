@@ -311,7 +311,10 @@ std::vector<Node*> findBestPath(PRM* roadmap,
 					}
 				}
 				candidate_path[i]->yaw = max_yaw;
-				total_num_voxels += max_voxels;
+				// total_num_voxels += max_voxels;
+				total_num_voxels += computeWeightedGain(start, //// Using that weighted gain to total voxels, instead of max voxels
+										candidate_path[i], 
+										max_voxels);
 			}
 			else{
 
@@ -322,8 +325,13 @@ std::vector<Node*> findBestPath(PRM* roadmap,
 				if (node_yaw < 0){
 					node_yaw = 2*PI_const - (-node_yaw);
 				}
-				total_num_voxels += interpolateNumVoxels(this_node, node_yaw);
+				// total_num_voxels += interpolateNumVoxels(this_node, node_yaw);
 				// cout << "interpolate result: " << interpolateNumVoxels(this_node, node_yaw) << endl;
+
+				interp_voxels = interpolateNumVoxels(this_node, node_yaw);
+				total_num_voxels += computeWeightedGain(start, //// Using that weighted gain to total voxels, instead of max voxels
+										this_node, 
+										interp_voxels);
 			}
 		}
 

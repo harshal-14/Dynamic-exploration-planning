@@ -25,6 +25,11 @@ typedef struct Node{
 	bool update;         // if we need to reevaluate the info gain
 	bool new_node; 		 // if the node is newly added
 	std::unordered_set<Node*> adjNodes;
+
+	// number of updates for time decay factor
+	int update_count;
+	double last_update_time;
+
 	Node (){}
 	Node(point3d _p){
 		p = _p;

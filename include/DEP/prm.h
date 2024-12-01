@@ -18,6 +18,14 @@ bool VISUALIZE_MAP = true;
 // static std::vector<geometry_msgs::Point> DEFAULT_VECTOR;
 static std::vector<visualization_msgs::Marker> DEFAULT_VECTOR;
 
+//// Time Decay constants
+const double TIME_DECAY_FACTOR = 0.95; // decay for each iteration
+const double TIME_DECAY_THRESHOLD = 5.0; // seconds
+
+//// Distance pruning constants
+const double DISTANCE_WEIGHT = 1.5;
+const double MIN_DISTANCE_THRESHOLD = 0.5; //// Min distance to consider for pruning
+
 std::vector<double> generate_yaws(int n){
 	std::vector<double> yaws;
 	for (int i=0; i<n; ++i){
@@ -361,6 +369,24 @@ double getAdaptiveThreshold(Node* n , PRM* map){
 	return base_threshold * (1.0 - (local_info_gain/max_info)*0.5); /// iska mtlb yeh hai ki agar local info gain zyada hai toh threshold kam hoga, toh zyada nodes add honge
 }
 
+double compute_time_decay(Node* n, double current_time){
+	if (n->update_count == 0){ // No decay
+		return 1;
+	}
+	double time_since_last_update = current_time - n->last_update_time;
+	if (time_since_last_update > TIME_DECAY_THRESHOLD){
+		return pow(TIME_DECAY_FACTOR, n->update_count); //// TIME_DECAY_FACTOR^update-count
+	}
+	return 1;
+}
+
+double computedWeightedGain(Node* current_node, Node* candidate_node, double num_voxels){
+	double distance = current_node->p.distance(candidate_node->p);
+	distance = std::max(distance, MIN_DISTANCE_THRESHOLD);
+	double distance_weight = 1.0/pow(distance, DISTANCE_WEIGHT);
+	return num_voxels * distance_weight;
+}
+
 PRM* buildRoadMap(OcTree &tree, 
 				  PRM* map,
 				  std::vector<Node*> path,
@@ -537,8 +563,13 @@ PRM* buildRoadMap(OcTree &tree,
 		if (update and n->new_node==false){
 			n->update = true;
 			++count_update_node;
+
+			auto current_time = ros::Time::now().toSec();
+
+			n->update_count++;
+        	n->last_update_time = current_time;
 			// check the update condition: 
-			// 1. if node is very close to trajetory: set it to zero
+			// 1. if node is very close to trajectory: set it to zero
 			// 2. if it is already 0, leave it
 			// 3. if it is less than threshold (e.g 100), set it to zero
 			// 4. if non of those applies, recalculate it
@@ -553,7 +584,16 @@ PRM* buildRoadMap(OcTree &tree,
 			else{
 				++count_actual_update;
 				double num_voxels = calculateUnknown(tree, n, dmax);
-				n->num_voxels = num_voxels;
+
+				//// Apply time decay
+				double decay = compute_time_decay(n, current_time);
+				n->num_voxels = decay * num_voxels;
+				// n->num_voxels = num_voxels;
+
+				// Update the yaw_num_voxels
+				for (auto yaw_voxels: n->yaw_num_voxels){
+					yaw_voxels.second = decay * yaw_voxels.second;
+				}
 			}
 		}
 		else{

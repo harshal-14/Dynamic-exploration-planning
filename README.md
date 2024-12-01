@@ -9,7 +9,35 @@ This repo contains the implementation of Dynamic Environment Planner (DEP) which
 
 # Installation
 
-## Option 1: Docker Installation (Recommended)
+## Option 1: Use pre-built docker image (Recommended)
+
+### Step1: Pull docker image:
+Pull the latest image from docker hub, this step assumes you have docker service in your system, if not follow this [link](https://docs.docker.com/desktop/setup/install/linux/ubuntu/) to install it
+```bash
+docker pull hsdhillon1313/mp_dep:latest
+```
+### Step 2: Run the container
+Modify the command to mount the correct folder to your cloned repository directory
+
+```bash
+xhost +local:docker
+
+# Then run your docker command
+docker run -it \
+    --env="DISPLAY=$DISPLAY"" \
+    --env="QT_X11_NO_MITSHM=1" \
+    --volume="/home/lucifer/WPI/Fall_courses/MP/Dynamic-exploration-planning:/root/catkin_ws/src/DEP" \
+    --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw \
+    --volume="/dev/dri:/dev/dri:rw" \
+    --security-opt seccomp=unconfined \
+    --cap-add=SYS_PTRACE \
+    --privileged \
+    --network=host \
+    --name=dep_container_debug \
+    hsdhillon1313/mp_dep
+```     
+
+## Option 2: Docker Installation
 
 ### Step 1: Build the Docker Image
 Copy the provided Dockerfile into your project directory and build it. Note that building the image will take around 20-30 minutes.

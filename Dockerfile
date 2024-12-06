@@ -6,10 +6,9 @@ SHELL ["/bin/bash", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Set environment variables
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=all
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES all
 ENV QT_X11_NO_MITSHM=1
-ENV GAZEBO_MODEL_PATH=/root/.gazebo/models:/root/catkin_ws/src/drone_gazebo/models
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -33,6 +32,10 @@ RUN apt-get update && apt-get install -y \
     libgl1-mesa-dri \
     pulseaudio \
     alsa-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ROS dependencies
+RUN apt-get update && apt-get install -y \
     ros-melodic-octomap-server \
     ros-melodic-octomap-ros \
     ros-melodic-joy \
@@ -46,27 +49,18 @@ RUN apt-get update && apt-get install -y \
     ros-melodic-gazebo-ros-control \
     && rm -rf /var/lib/apt/lists/*
 
-# Create catkin workspace
+# Create catkin workspace structure
+RUN mkdir -p /root/catkin_ws/src
 RUN mkdir -p /root/tsdf_ws/src
-WORKDIR /root/tsdf_ws
 
-# Initialize workspace
+# Initialize tsdf workspace
+WORKDIR /root/tsdf_ws
 RUN catkin init \
     && catkin config --extend /opt/ros/melodic \
     && catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release \
     && catkin config --merge-devel
 
-# Clone dependencies
-WORKDIR /root/tsdf_ws/src
-RUN git clone https://github.com/catkin/catkin_simple.git
-
-# Build catkin_simple first to ensure it's available for voxblox_ros
-WORKDIR /root/tsdf_ws
-RUN /bin/bash -c 'source /opt/ros/melodic/setup.bash && \
-    catkin build catkin_simple --no-deps && \
-    source devel/setup.bash'
-
-# Clone voxblox and setup workspace
+# Clone and build voxblox
 WORKDIR /root/tsdf_ws/src
 RUN git clone https://github.com/ethz-asl/voxblox.git \
     && wstool init . ./voxblox/voxblox_https.rosinstall \
@@ -92,12 +86,9 @@ COPY <<EOF /root/tsdf_ws/src/voxblox/voxblox_ros/launch/esdf.launch
 </launch>
 EOF
 
-# Now that catkin_simple is built, make sure it's sourced and build voxblox_ros
+# Build voxblox
 WORKDIR /root/tsdf_ws
-RUN /bin/bash -c 'source /opt/ros/melodic/setup.bash && \
-    source devel/setup.bash && \
-    export CMAKE_PREFIX_PATH=/root/tsdf_ws/devel:$CMAKE_PREFIX_PATH && \
-    catkin build voxblox_ros --no-deps --mem-limit 75%'
+RUN /bin/bash -c '. /opt/ros/melodic/setup.bash; catkin build voxblox_ros'
 
 # Install nlopt
 WORKDIR /root
@@ -107,19 +98,15 @@ RUN wget https://github.com/stevengj/nlopt/archive/v2.7.1.tar.gz \
     && mkdir build \
     && cd build \
     && cmake .. \
-    && make -j1 \
+    && make \
     && make install
 
-# Create catkin workspace and clone DEP
-RUN mkdir -p /root/catkin_ws/src
+# Clone required repositories
 WORKDIR /root/catkin_ws/src
 RUN git clone https://github.com/Zhefan-Xu/drone_gazebo.git \
     && git clone https://github.com/Zhefan-Xu/DEP.git
 
-# Modify CMakeLists.txt to use the correct nlopt path
-RUN sed -i 's|/home/zhefan/Desktop/nlopt/build|/root/nlopt-2.7.1/build|g' /root/catkin_ws/src/DEP/CMakeLists.txt
-
-# Download Gazebo models
+# Download and install Gazebo models
 RUN mkdir -p ~/.gazebo/models \
     && cd ~/.gazebo/models \
     && wget https://github.com/osrf/gazebo_models/archive/refs/heads/master.zip \
@@ -127,21 +114,23 @@ RUN mkdir -p ~/.gazebo/models \
     && mv gazebo_models-master/* . \
     && rm -rf gazebo_models-master master.zip
 
-# Build the workspace with memory limits
+# Modify CMakeLists.txt to use the correct nlopt path
+RUN sed -i 's|/home/zhefan/Desktop/nlopt/build|/root/nlopt-2.7.1/build|g' /root/catkin_ws/src/DEP/CMakeLists.txt
+
+# Set up environment variables
+ENV GAZEBO_MODEL_PATH=/root/.gazebo/models:/root/catkin_ws/src/drone_gazebo/models:${GAZEBO_MODEL_PATH}
+ENV QT_X11_NO_MITSHM=1
+
+# Build the workspace
 WORKDIR /root/catkin_ws
-RUN /bin/bash -c 'source /opt/ros/melodic/setup.bash && \
-    source /root/tsdf_ws/devel/setup.bash && \
-    export MAKEFLAGS="-j1" && \
-    export CXX_FLAGS="-O1" && \
-    ulimit -v 4000000 && \
-    catkin_make --mem-limit 75%'
+RUN /bin/bash -c '. /opt/ros/melodic/setup.bash; . /root/tsdf_ws/devel/setup.bash; catkin_make'
 
 # Source ROS workspace in bashrc
 RUN echo "source /opt/ros/melodic/setup.bash" >> ~/.bashrc \
     && echo "source /root/tsdf_ws/devel/setup.bash" >> ~/.bashrc \
     && echo "source /root/catkin_ws/devel/setup.bash" >> ~/.bashrc
 
-# Setup audio script
+# Create a script to set up audio
 RUN echo '#!/bin/bash\n\
 pulseaudio -D --exit-idle-time=-1\n\
 pacmd load-module module-virtual-sink sink_name=dummy\n\
@@ -150,5 +139,5 @@ pacmd set-default-source dummy.monitor\n\
 ' > /root/setup_audio.sh \
     && chmod +x /root/setup_audio.sh
 
+# Set the default command
 CMD ["/bin/bash"]
-

@@ -1,0 +1,14 @@
+{
+    "name": "ROS Container",
+    "runArgs": [
+        "--network=host",
+        "-e", "DISPLAY=${localEnv:DISPLAY}",
+        "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--privileged"
+    ],
+    "containerEnv": {
+        "QT_X11_NO_MITSHM": "1",
+        "LIBGL_ALWAYS_INDIRECT": "0",
+        "DISPLAY": ":0"
+    }
+}

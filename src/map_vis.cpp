@@ -101,22 +101,6 @@ Node collision_node;
 auto start_time_total = high_resolution_clock::now();
 double least_distance = 10000;
 
-void write_metrics_to_file(std::ofstream& file, double total_time, double total_comp_time, 
-                          double total_path_length, double total_path_segment, 
-                          double total_distance_to_obstacle, int iteration) {
-    if (file.is_open()) {
-        file << iteration << ","
-             << total_time << ","
-             << total_comp_time << ","
-             << total_path_length << ","
-             << total_path_segment << ","
-             << total_distance_to_obstacle << "\n";
-        file.flush();  // Force write to disk
-    } else {
-        ROS_ERROR("Failed to write to metrics file");
-    }
-}
-
 void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octomap::ConstPtr& bmap){
 	abtree = octomap_msgs::binaryMsgToMap(*bmap);
 	tree_ptr = dynamic_cast<OcTree*>(abtree);
@@ -273,10 +257,6 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		auto stop_time_total = high_resolution_clock::now();
 		auto total_duration = duration_cast<microseconds>(stop_time_total - start_time_total);
 		total_time = total_duration.count()/1e6;
-
-		write_metrics_to_file(metrics_file, total_time, total_comp_time, 
-                     total_path_length, total_path_segment, 
-                     total_distance_to_obstacle, count_iteration);
         cout << "==============================" << "END" << "==============================" << endl;
 		// print_path(path);
 
@@ -390,22 +370,21 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			path_marker.scale.z = 0.05;
 			path_marker.color.a = 1.0;
 			// map_vis_array.push_back(path_marker);
-			for (auto& marker : map_vis_array) {
-                if (marker.pose.position.x == last_node_in_path->p.x() &&
-                marker.pose.position.y == last_node_in_path->p.y() &&
-                marker.pose.position.z == last_node_in_path->p.z()) {
-            // Change the color for the last node in the path
-                marker.scale.x= 0.4;
-                marker.scale.y= 0.4;
-                marker.scale.z= 0.4;
-                marker.color.r = 1.0; // Example: Green
-                marker.color.g = 1.0;
-                marker.color.b = 0.0;
-            break; // Stop searching once we find the correct marker
-         }
-        }
 			map_markers.markers = map_vis_array;
-			
+		// 	for (auto& marker : map_vis_array) {
+        //         if (marker.pose.position.x == last_node_in_path->p.x() &&
+        //         marker.pose.position.y == last_node_in_path->p.y() &&
+        //         marker.pose.position.z == last_node_in_path->p.z()) {
+        //     // Change the color for the last node in the path
+        //         marker.scale.x= 0.4;
+        //         marker.scale.y= 0.4;
+        //         marker.scale.z= 0.4;
+        //         marker.color.r = 1.0; // Example: Green
+        //         marker.color.g = 1.0;
+        //         marker.color.b = 0.0;
+        //     break; // Stop searching once we find the correct marker
+        //  }
+        // }
 		}
 
 		// ====================================================================
@@ -611,9 +590,9 @@ int main(int argc, char** argv){
 
 	ROS_INFO("Writing metrics - Time: %f, Comp Time: %f, Path Length: %f", total_time, total_comp_time, total_path_length);
 	std::string timestamp = get_ros_timestamp();
-	std::string filename = "/root/catkin_ws/exploration_metrics_" + timestamp + ".csv";
+	std::string filename = "/root/catkin_ws/exploration_iteration_" + timestamp + ".csv";
 	metrics_file.open(filename);
-	metrics_file << "iteration,total_time,total_comp_time,total_path_length,total_path_segment,total_distance_to_obstacle\n";
+	metrics_file << "total_time,total_comp_time,total_path_length,total_path_segment,total_distance_to_obstacle\n";
 	while (ros::ok()){
 		map_vis_pub.publish(map_markers);	
 		goal_pub.publish(next_goal);
@@ -658,6 +637,7 @@ int main(int argc, char** argv){
 		optimization_data_sperate << "Total obstacle distance: " << total_distance_to_obstacle << endl;
 
 		// Save data to metics file:
+
 		metrics_file << total_time << "," << total_comp_time << "," << total_path_length << "," << total_path_segment << "," << total_distance_to_obstacle << "\n";
 		ros::spinOnce();
 		loop_rate.sleep();

@@ -140,8 +140,6 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		if (path_idx >= path.size()){
 			new_plan = true;
 			// cout << "new plan" << endl;
-			std::cout<<"size of roadmap"<<roadmap->size<<std::endl;
-			std::cout<<"Voxel count of roadmap"<<roadmap->total_num_unknown<<std::endl;
 		}
 		else{
 			next_goal = getNextGoal(path, path_idx, odom);
@@ -150,7 +148,6 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	}
 
 	// Make new plan
-
 	if (new_plan){
 		// WHen we have new plan, we set it to default value
 		Node* start;
@@ -291,22 +288,6 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			path_marker.scale.z = 0.05;
 			path_marker.color.a = 1.0;
 			// map_vis_array.push_back(path_marker);
-			Node* last_node_in_path = path.back(); // Get the last node in the path
-
-            for (auto& marker : map_vis_array) {
-                if (marker.pose.position.x == last_node_in_path->p.x() &&
-                marker.pose.position.y == last_node_in_path->p.y() &&
-                marker.pose.position.z == last_node_in_path->p.z()) {
-            // Change the color for the last node in the path
-                marker.scale.x= 0.4;
-                marker.scale.y= 0.4;
-                marker.scale.z= 0.4;
-                marker.color.r = 1.0; // Example: Green
-                marker.color.g = 1.0;
-                marker.color.b = 0.0;
-            break; // Stop searching once we find the correct marker
-         }
-        }
 			map_markers.markers = map_vis_array;
 			
 		}
@@ -1056,7 +1037,7 @@ std::vector<Node*> findBestPath(PRM* roadmap,
 	// cout << "check4" << endl;
 	// cout << "final id: " << best_idx << endl;
 	// cout << "final path size: " << final_path.size() << endl;
-		return final_path;
+	return final_path;
 }
 
 bool checkNextGoalCollision(Node current_node, DEP::Goal next_goal, OcTree& tree){

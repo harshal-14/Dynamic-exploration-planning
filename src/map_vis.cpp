@@ -65,7 +65,7 @@ double total_path_length = 0;
 double total_path_segment = 0;
 double total_distance_to_obstacle = 0;
 double previous_goal_voxels = -100;
-std::ofstream metrics_file;
+
 
 DEP::Goal getNextGoal(std::vector<Node*> path, int path_idx, const nav_msgs::OdometryConstPtr& odom);
 bool isReach(const nav_msgs::OdometryConstPtr& odom, DEP::Goal next_goal);
@@ -100,7 +100,6 @@ Node last_goal_node (point3d (-100, -100, -100));
 Node collision_node;
 auto start_time_total = high_resolution_clock::now();
 double least_distance = 10000;
-
 void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octomap::ConstPtr& bmap){
 	abtree = octomap_msgs::binaryMsgToMap(*bmap);
 	tree_ptr = dynamic_cast<OcTree*>(abtree);
@@ -141,6 +140,8 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		if (path_idx >= path.size()){
 			new_plan = true;
 			// cout << "new plan" << endl;
+			std::cout<<"size of roadmap"<<roadmap->size<<std::endl;
+			std::cout<<"Voxel count of roadmap"<<roadmap->total_num_unknown<<std::endl;
 		}
 		else{
 			next_goal = getNextGoal(path, path_idx, odom);
@@ -149,6 +150,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	}
 
 	// Make new plan
+
 	if (new_plan){
 		// WHen we have new plan, we set it to default value
 		Node* start;
@@ -253,10 +255,6 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
         cout << "Total Computation Time: " << total_comp_time << endl;
         cout << "Path Length So Far: " << total_path_length << endl;
 		cout << "Avg Computation Time: " << total_comp_time/total_path_segment << endl;
-
-		auto stop_time_total = high_resolution_clock::now();
-		auto total_duration = duration_cast<microseconds>(stop_time_total - start_time_total);
-		total_time = total_duration.count()/1e6;
         cout << "==============================" << "END" << "==============================" << endl;
 		// print_path(path);
 
@@ -293,8 +291,22 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			path_marker.scale.z = 0.05;
 			path_marker.color.a = 1.0;
 			// map_vis_array.push_back(path_marker);
-		
+			Node* last_node_in_path = path.back(); // Get the last node in the path
 
+            for (auto& marker : map_vis_array) {
+                if (marker.pose.position.x == last_node_in_path->p.x() &&
+                marker.pose.position.y == last_node_in_path->p.y() &&
+                marker.pose.position.z == last_node_in_path->p.z()) {
+            // Change the color for the last node in the path
+                marker.scale.x= 0.4;
+                marker.scale.y= 0.4;
+                marker.scale.z= 0.4;
+                marker.color.r = 1.0; // Example: Green
+                marker.color.g = 1.0;
+                marker.color.b = 0.0;
+            break; // Stop searching once we find the correct marker
+         }
+        }
 			map_markers.markers = map_vis_array;
 			
 		}
@@ -371,20 +383,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			path_marker.color.a = 1.0;
 			// map_vis_array.push_back(path_marker);
 			map_markers.markers = map_vis_array;
-		// 	for (auto& marker : map_vis_array) {
-        //         if (marker.pose.position.x == last_node_in_path->p.x() &&
-        //         marker.pose.position.y == last_node_in_path->p.y() &&
-        //         marker.pose.position.z == last_node_in_path->p.z()) {
-        //     // Change the color for the last node in the path
-        //         marker.scale.x= 0.4;
-        //         marker.scale.y= 0.4;
-        //         marker.scale.z= 0.4;
-        //         marker.color.r = 1.0; // Example: Green
-        //         marker.color.g = 1.0;
-        //         marker.color.b = 0.0;
-        //     break; // Stop searching once we find the correct marker
-        //  }
-        // }
+			
 		}
 
 		// ====================================================================
@@ -554,21 +553,15 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	
 }
  
- std::string get_ros_timestamp() {
-    ros::Time now = ros::Time::now();
-    std::stringstream ss;
-    ss << std::fixed << std::setprecision(0) << now.toSec();
-    return ss.str();
-}
 
 int main(int argc, char** argv){
 	ros::init(argc, argv, "map_visualizer");
-	ros::Time::init();
 	ros::NodeHandle nh;
 	ros::NodeHandle nh_private("~");
 	voxblox_server_ptr = new voxblox::EsdfServer(nh, nh_private);
 	// Eigen::Vector3d p_test (0.3, 6, 1);
 	// double distance = 0;
+
 	// ros::Subscriber sub = n.subscribe("octomap_binary", 100, callback);
 	map_vis_pub = nh.advertise<visualization_msgs::MarkerArray>("map_vis_array", 0);
 	goal_pub = nh.advertise<DEP::Goal>("goal", 0);
@@ -587,12 +580,6 @@ int main(int argc, char** argv){
 	// optimization_data.open("/home/zhefan/Desktop/optimization_revise/tunnel/optimization_single/tunnel_opt3.txt");
 	// optimization_data.open("/home/zhefan/Desktop/optimization_revise/auditorium/optimization_single/auditorium_opt3.txt");
 	// replan_data.open("/home/zhefan/Desktop/Replan_Data_New/DEP/replan_data1.txt");
-
-	ROS_INFO("Writing metrics - Time: %f, Comp Time: %f, Path Length: %f", total_time, total_comp_time, total_path_length);
-	std::string timestamp = get_ros_timestamp();
-	std::string filename = "/root/catkin_ws/exploration_iteration_" + timestamp + ".csv";
-	metrics_file.open(filename);
-	metrics_file << "total_time,total_comp_time,total_path_length,total_path_segment,total_distance_to_obstacle\n";
 	while (ros::ok()){
 		map_vis_pub.publish(map_markers);	
 		goal_pub.publish(next_goal);
@@ -635,14 +622,10 @@ int main(int argc, char** argv){
 		optimization_data_sperate << "Total Exploration Time: " << total_time << endl;
 		optimization_data_sperate << "Total Path Length: " << total_path_length << endl;
 		optimization_data_sperate << "Total obstacle distance: " << total_distance_to_obstacle << endl;
-
-		// Save data to metics file:
-
-		metrics_file << total_time << "," << total_comp_time << "," << total_path_length << "," << total_path_segment << "," << total_distance_to_obstacle << "\n";
 		ros::spinOnce();
 		loop_rate.sleep();
 	}
-	metrics_file.close();
+
 	return 0;
 }
 
@@ -1073,7 +1056,7 @@ std::vector<Node*> findBestPath(PRM* roadmap,
 	// cout << "check4" << endl;
 	// cout << "final id: " << best_idx << endl;
 	// cout << "final path size: " << final_path.size() << endl;
-	return final_path;
+		return final_path;
 }
 
 bool checkNextGoalCollision(Node current_node, DEP::Goal next_goal, OcTree& tree){

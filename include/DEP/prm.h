@@ -13,18 +13,57 @@ double FOV = 1.8;
 double dmin = 0;
 double dmax = 1.0;
 
+double zone1 = 0.5; // 0.8
+double zone2 = 1.5; // 2.0
+double zone3 = 2.5; // 3.0
+
+void clearance_calculator(const OcTree& tree, Node* n) {
+    point3d p=n->p;
+	
+    double ray_yaw;
+    double min_clearance = 1000;  // Set a large value as initial minimum clearance
+    for (ray_yaw = 0; ray_yaw < 2 * M_PI; ray_yaw += M_PI / 10) {
+        point3d direction(cos(ray_yaw), sin(ray_yaw), 0.0);  // Direction in 2D plane
+        direction = direction.normalized();  // Normalize the direction
+
+        point3d end;  // Endpoint of the ray 
+        bool ignoreUnknownCells = true;
+
+        // Cast a ray in the current direction
+        bool hit_surface = tree.castRay(p, direction, end, ignoreUnknownCells, 10.0);
+        if (hit_surface) {
+            double ray_distance = n->p.distance(end);
+            min_clearance = std::min(min_clearance, ray_distance);
+        }
+    }
+
+    // Assign threshold values based on min_clearance
+    if (min_clearance < zone1) {
+        n->thresh_low = 0.8;
+        n->thresh_high = 1.2;
+		n->weight=1.0 ;// 1.4,1.8,2.5
+    } else if (min_clearance < zone2) {
+        n->thresh_low = 1.2;
+        n->thresh_high = 1.8; // 2.0, 2.5, 3.0
+		double v=(n->thresh_high)*(n->thresh_high)*(n->thresh_high);
+		n->weight=1/v;
+    } else if (min_clearance < zone3) {
+        n->thresh_low = 1.8;
+        n->thresh_high = 2.2; // 2.8,3.5,4.0
+		double v=(n->thresh_high)*(n->thresh_high)*(n->thresh_high);
+		n->weight=1/v;
+    } else {
+        n->thresh_low = 2.2;
+        n->thresh_high = 2.7;
+		double v=(n->thresh_high)*(n->thresh_high)*(n->thresh_high);
+		n->weight=1/v;
+    }
+}
+
 // Visualize Map
 bool VISUALIZE_MAP = true;
 // static std::vector<geometry_msgs::Point> DEFAULT_VECTOR;
 static std::vector<visualization_msgs::Marker> DEFAULT_VECTOR;
-
-//// Time Decay constants
-const double TIME_DECAY_FACTOR = 0.95; // decay for each iteration
-const double TIME_DECAY_THRESHOLD = 5.0; // seconds
-
-//// Distance pruning constants
-const double DISTANCE_WEIGHT = 1.5;
-const double MIN_DISTANCE_THRESHOLD = 0.5; //// Min distance to consider for pruning
 
 std::vector<double> generate_yaws(int n){
 	std::vector<double> yaws;
@@ -107,6 +146,7 @@ Node* randomConfig(const OcTree& tree, bool allow_not_valid=false){
 	}
 
 	Node* nptr = new Node(p);
+	clearance_calculator(tree,nptr);
 
 	return nptr;
 }
@@ -146,7 +186,7 @@ Node* randomConfigBBX(const OcTree& tree, std::vector<double> &bbx){
 	}
 
 	Node* nptr = new Node(p);
-
+	clearance_calculator(tree,nptr);
 	return nptr;
 }
 
@@ -243,6 +283,8 @@ bool isInFOV(const OcTree& tree, point3d p, point3d u, double dmax){
 double calculateUnknown(const OcTree& tree, Node* n, double dmax){
 	// Position:
 	point3d p = n->p;
+	dmax = 1*(n->thresh_high - 0.5);
+
 	// Possible range
 	double xmin, xmax, ymin, ymax, zmin, zmax;
 	xmin = p.x() - dmax;
@@ -346,7 +388,6 @@ bool isNodeRequireUpdate(Node* n, std::vector<Node*> path, double& least_distanc
 	
 }
 
-
 // Ensure the vertical sensor range condition for node connection
 bool sensorRangeCondition(Node* n1, Node* n2){
 	point3d direction = n2->p - n1->p;
@@ -360,32 +401,6 @@ bool sensorRangeCondition(Node* n1, Node* n2){
 	}
 }
 
-// Added for adaptive threshold. Basically this will 
-double getAdaptiveThreshold(Node* n , PRM* map){
-	double base_threshold = 0.8;
-	double local_info_gain = n->num_voxels;
-	double max_info = map->getMaxUnknown();
-
-	return base_threshold * (1.0 - (local_info_gain/max_info)*0.5); /// iska mtlb yeh hai ki agar local info gain zyada hai toh threshold kam hoga, toh zyada nodes add honge
-}
-
-double compute_time_decay(Node* n, double current_time){
-	if (n->update_count == 0){ // No decay
-		return 1;
-	}
-	double time_since_last_update = current_time - n->last_update_time;
-	if (time_since_last_update > TIME_DECAY_THRESHOLD){
-		return pow(TIME_DECAY_FACTOR, n->update_count); //// TIME_DECAY_FACTOR^update-count
-	}
-	return 1;
-}
-
-double computedWeightedGain(Node* current_node, Node* candidate_node, double num_voxels){
-	double distance = current_node->p.distance(candidate_node->p);
-	distance = std::max(distance, MIN_DISTANCE_THRESHOLD);
-	double distance_weight = 1.0/pow(distance, DISTANCE_WEIGHT);
-	return num_voxels * distance_weight;
-}
 
 PRM* buildRoadMap(OcTree &tree, 
 				  PRM* map,
@@ -427,10 +442,7 @@ PRM* buildRoadMap(OcTree &tree,
 				Node* nn = map->nearestNeighbor(n);
 				distance_to_nn = n->p.distance(nn->p);
 				// cout << "least distance" <<distance_to_nn << endl;
-				// if (distance_to_nn < distance_thresh){
-				//// Adaptive Threshold, if the distance is less than the threshold, then we will not add the node, otherwise we will add the node
-				//// Areas with high information gain, allow desne sampling
-				if (distance_to_nn < getAdaptiveThreshold(n, map)){
+				if (distance_to_nn < n->thresh_low){
 					++count_failure;
 					delete n;
 				}
@@ -501,7 +513,7 @@ PRM* buildRoadMap(OcTree &tree,
 					Node* nn = map->nearestNeighbor(n);
 					distance_to_nn = n->p.distance(nn->p);
 					// cout << "least distance: " <<distance_to_nn << endl;
-					if (distance_to_nn < distance_thresh){
+					if (distance_to_nn < n->thresh_low){
 						++count_failure2;
 						delete n;
 					}
@@ -528,11 +540,22 @@ PRM* buildRoadMap(OcTree &tree,
 		for (Node* nearest_neighbor: knn){
 			bool has_collision = checkCollision(tree, n, nearest_neighbor);
 			double distance_to_knn = n->p.distance(nearest_neighbor->p);
+			double high ;
+            double low ;
+            if(n->thresh_high >=nearest_neighbor->thresh_high){
+                high=1.3*(n->thresh_high);
+                low=nearest_neighbor->thresh_low;
+            }
+            else{
+                high=1.3*(nearest_neighbor->thresh_high);
+                low=n->thresh_low;
+
+            }
 			bool range_condition = sensorRangeCondition(n, nearest_neighbor) and sensorRangeCondition(nearest_neighbor, n);
 			// if (distance_to_knn < 0.8){
 			// 	cout << "bad node" << endl;
 			// }
-			if (has_collision == false and distance_to_knn < 1.5 and range_condition == true){
+			if (has_collision == false and distance_to_knn < high and distance_to_knn > low and range_condition == true){
 				n->adjNodes.insert(nearest_neighbor);
 				nearest_neighbor->adjNodes.insert(n); 
 			}
@@ -563,13 +586,8 @@ PRM* buildRoadMap(OcTree &tree,
 		if (update and n->new_node==false){
 			n->update = true;
 			++count_update_node;
-
-			auto current_time = ros::Time::now().toSec();
-
-			n->update_count++;
-        	n->last_update_time = current_time;
 			// check the update condition: 
-			// 1. if node is very close to trajectory: set it to zero
+			// 1. if node is very close to trajetory: set it to zero
 			// 2. if it is already 0, leave it
 			// 3. if it is less than threshold (e.g 100), set it to zero
 			// 4. if non of those applies, recalculate it
@@ -584,24 +602,52 @@ PRM* buildRoadMap(OcTree &tree,
 			else{
 				++count_actual_update;
 				double num_voxels = calculateUnknown(tree, n, dmax);
-
-				//// Apply time decay
-				double decay = compute_time_decay(n, current_time);
-				n->num_voxels = decay * num_voxels;
-				// n->num_voxels = num_voxels;
-
-				// Update the yaw_num_voxels
-				for (auto yaw_voxels: n->yaw_num_voxels){
-					yaw_voxels.second = decay * yaw_voxels.second;
-				}
+				n->num_voxels = num_voxels;
 			}
 		}
 		else{
 			n->update = false;
 		}
 		n->new_node = false;
+		/////new code 
+		if(n->thresh_high>1.8 and n->adjNodes.size()<25){
 
-		if (n->num_voxels>max_unknown){ // Update max unknown going to getMaxUnknown, max unknown is coming from n, what is n? n is Node in KDTree class
+		std::vector<Node*> knn = map->kNearestNeighbor(n, 25);
+
+		for (Node* nearest_neighbor: knn){
+			bool has_collision = checkCollision(tree, n, nearest_neighbor);
+			double distance_to_knn = n->p.distance(nearest_neighbor->p);
+			double high ;
+            double low ;
+            if(n->thresh_high >=nearest_neighbor->thresh_high){
+                high=1.3*(n->thresh_high);
+                low=nearest_neighbor->thresh_low;
+            }
+            else{
+                high=1.3*(nearest_neighbor->thresh_high);
+                low=n->thresh_low;
+
+            }
+			bool range_condition = sensorRangeCondition(n, nearest_neighbor) and sensorRangeCondition(nearest_neighbor, n);
+			// if (distance_to_knn < 0.8){
+			// 	cout << "bad node" << endl;
+			// }
+			if (has_collision == false and distance_to_knn < high and distance_to_knn > low and range_condition == true){
+				n->adjNodes.insert(nearest_neighbor);
+				nearest_neighbor->adjNodes.insert(n); 
+			}
+		}
+
+
+		if (n->adjNodes.size() != 0){
+			map->addRecord(n);
+			double num_voxels = calculateUnknown(tree, n, dmax);
+			n->num_voxels = num_voxels;
+		}
+
+		}
+		///till here
+		if (n->num_voxels>max_unknown){
 			max_unknown = n->num_voxels;
 		}
 		map->addGoalPQ(n);
@@ -707,3 +753,5 @@ PRM* buildRoadMap(OcTree &tree,
 
 
 // ===================Visualization============================
+
+

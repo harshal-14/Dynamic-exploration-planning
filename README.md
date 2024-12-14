@@ -1,4 +1,4 @@
-# Dynamic Exploration Planner (DEP) for Robot Exploration
+# DynaPRM for Robot Exploration
 
 This repo contains the implementation of Dynamic Environment Planner (DEP) which aims at robotic exploration in dynamic and unknown environments in 
 [ROS](https://www.ros.org/) and [Gazebo](http://gazebosim.org/). This work is adapted from this paper: https://ieeexplore.ieee.org/document/9362184.
@@ -9,7 +9,35 @@ This repo contains the implementation of Dynamic Environment Planner (DEP) which
 
 # Installation
 
-## Option 1: Docker Installation (Recommended)
+## Option 1: Use pre-built docker image (Recommended)
+
+### Step1: Pull docker image:
+Pull the latest image from docker hub, this step assumes you have docker service in your system, if not follow this [link](https://docs.docker.com/desktop/setup/install/linux/ubuntu/) to install it
+```bash
+docker pull hsdhillon1313/mp_dep:latest
+```
+### Step 2: Run the container
+Modify the command to mount the correct folder to your cloned repository directory
+
+```bash
+xhost +local:docker
+
+# Then run your docker command
+docker run -it \
+    --env="DISPLAY=$DISPLAY"" \
+    --env="QT_X11_NO_MITSHM=1" \
+    --volume="/home/lucifer/WPI/Fall_courses/MP/Dynamic-exploration-planning:/root/catkin_ws/src/DEP" \
+    --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw \
+    --volume="/dev/dri:/dev/dri:rw" \
+    --security-opt seccomp=unconfined \
+    --cap-add=SYS_PTRACE \
+    --privileged \
+    --network=host \
+    --name=dep_container \
+    hsdhillon1313/mp_dep
+```     
+
+## Option 2: Docker Installation
 
 ### Step 1: Build the Docker Image
 Copy the provided Dockerfile into your project directory and build it. Note that building the image will take around 20-30 minutes.
@@ -202,15 +230,46 @@ To visualize the exploration process, below are the ros topics you need to add i
 # Restricting the Exploration Range
 Sometimes, you may want to explore a confined space (defined by a cubic). In order to achieve that, simply modify the `include/env.h` file to change the corresponding dimension of the desired space and then run `catkin_make` in `~/catkin_ws`.
 
-# Citation and Reference:
-If you find this work useful, please cite the paper:
+# Troubleshooting for Docker Installation
+If you are having Docker X11 forwarding issue and not able to visualize Rviz and  gazebo on your system after termnial 1 command then follow these steps.
 
+0. Stop and remove the existing container
+
+1. First terminal (keep running):
+```bash
+socat TCP-LISTEN:6000,reuseaddr,fork UNIX-CONNECT:/tmp/.X11-unix/X1
 ```
-@article{xu2021autonomous,
-  title={Autonomous UAV Exploration of Dynamic Environments via Incremental Sampling and Probabilistic Roadmap},
-  author={Xu, Zhefan and Deng, Di and Shimada, Kenji},
-  journal={IEEE Robotics and Automation Letters},
-  year={2021},
-  publisher={IEEE}
-}
+
+2. Second terminal, the exact working Docker command:
+```bash
+docker run -it \
+    --env="DISPLAY=host.docker.internal:0.0" \
+    --env="QT_X11_NO_MITSHM=1" \
+    --env="XDG_RUNTIME_DIR=/tmp/runtime-root" \
+    --env="LIBGL_ALWAYS_SOFTWARE=1" \
+    --add-host=host.docker.internal:host-gateway \
+    --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
+    --volume="/dev/dri:/dev/dri:rw" \
+    --volume="/home/lucifer/WPI/Fall_courses/MP/Dynamic-exploration-planning:/root/catkin_ws/src/DEP" \
+    --privileged \
+    --network=host \
+    --name=dep_container \
+    hsdhillon1313/mp_dep
+```
+
+3. Inside container, the exact steps that worked:
+```bash
+# Create runtime directory
+mkdir -p /tmp/runtime-root
+chmod 700 /tmp/runtime-root
+
+# Install exact packages we used before
+apt-get update && apt-get install -y \
+    mesa-utils \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    qt5-default
+
+# Launch ROS (exactly as before)
+roslaunch drone_gazebo cafe.launch
 ```

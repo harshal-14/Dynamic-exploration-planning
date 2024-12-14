@@ -1,0 +1,7 @@
+# Generated plot files
+*.csv
+*.png
+
+# Python cache files
+__pycache__/
+*.pyc

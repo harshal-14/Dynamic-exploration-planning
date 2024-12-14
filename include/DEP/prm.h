@@ -5,8 +5,7 @@
 #include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
 #include <voxblox_ros/esdf_server.h>
-#include <ros/ros.h>
-#include <chrono>
+
 
 
 // Depth CAMERA
@@ -14,123 +13,57 @@ double FOV = 1.8;
 double dmin = 0;
 double dmax = 1.0;
 
+double zone1 = 0.5; // 0.8
+double zone2 = 1.5; // 2.0
+double zone3 = 2.5; // 3.0
+
+void clearance_calculator(const OcTree& tree, Node* n) {
+    point3d p=n->p;
+	
+    double ray_yaw;
+    double min_clearance = 1000;  // Set a large value as initial minimum clearance
+    for (ray_yaw = 0; ray_yaw < 2 * M_PI; ray_yaw += M_PI / 10) {
+        point3d direction(cos(ray_yaw), sin(ray_yaw), 0.0);  // Direction in 2D plane
+        direction = direction.normalized();  // Normalize the direction
+
+        point3d end;  // Endpoint of the ray 
+        bool ignoreUnknownCells = true;
+
+        // Cast a ray in the current direction
+        bool hit_surface = tree.castRay(p, direction, end, ignoreUnknownCells, 10.0);
+        if (hit_surface) {
+            double ray_distance = n->p.distance(end);
+            min_clearance = std::min(min_clearance, ray_distance);
+        }
+    }
+
+    // Assign threshold values based on min_clearance
+    if (min_clearance < zone1) {
+        n->thresh_low = 0.8;
+        n->thresh_high = 1.2;
+		n->weight=1.0 ;// 1.4,1.8,2.5
+    } else if (min_clearance < zone2) {
+        n->thresh_low = 1.2;
+        n->thresh_high = 1.8; // 2.0, 2.5, 3.0
+		double v=(n->thresh_high)*(n->thresh_high)*(n->thresh_high);
+		n->weight=1/v;
+    } else if (min_clearance < zone3) {
+        n->thresh_low = 1.8;
+        n->thresh_high = 2.2; // 2.8,3.5,4.0
+		double v=(n->thresh_high)*(n->thresh_high)*(n->thresh_high);
+		n->weight=1/v;
+    } else {
+        n->thresh_low = 2.2;
+        n->thresh_high = 2.7;
+		double v=(n->thresh_high)*(n->thresh_high)*(n->thresh_high);
+		n->weight=1/v;
+    }
+}
+
 // Visualize Map
 bool VISUALIZE_MAP = true;
 // static std::vector<geometry_msgs::Point> DEFAULT_VECTOR;
 static std::vector<visualization_msgs::Marker> DEFAULT_VECTOR;
-
-
-
-// Add performance tracking
-struct PerformanceStats {
-    int cache_hits = 0;
-    int cache_misses = 0;
-    double total_gain_calc_time = 0;
-};
-
-static PerformanceStats perfStats;
-
-class GainCache {
-private:
-    struct CachedValue {
-        double timestamp;
-        double gain;
-        std::map<double, int> yaw_num_voxels;
-    };
-    
-    struct MapCell {
-        double lastModifiedTime;
-        bool isModified;
-    };
-    
-    double cellSize;
-    std::unordered_map<size_t, CachedValue> nodeCache;
-    std::unordered_map<size_t, MapCell> mapGrid;
-    
-    size_t hashPosition(const point3d& p) {
-        return (static_cast<size_t>(p.x() / cellSize) * 73856093) ^
-               (static_cast<size_t>(p.y() / cellSize) * 19349663) ^
-               (static_cast<size_t>(p.z() / cellSize) * 83492791);
-    }
-
-public:
-    GainCache(double cs = 2.0) : cellSize(cs) {}
-    
-    void markRegionModified(const point3d& center, double radius) {
-        double t = ros::Time::now().toSec();
-        for(double x = center.x() - radius; x <= center.x() + radius; x += cellSize) {
-            for(double y = center.y() - radius; y <= center.y() + radius; y += cellSize) {
-                for(double z = center.z() - radius; z <= center.z() + radius; z += cellSize) {
-                    point3d p(x, y, z);
-                    if(p.distance(center) <= radius) {
-                        size_t hash = hashPosition(p);
-                        mapGrid[hash] = {t, true};
-                    }
-                }
-            }
-        }
-    }
-    
-    bool isRegionUnchanged(const point3d& p, double radius, double maxAge) {
-        double currentTime = ros::Time::now().toSec();
-        for(double x = p.x() - radius; x <= p.x() + radius; x += cellSize) {
-            for(double y = p.y() - radius; y <= p.y() + radius; y += cellSize) {
-                for(double z = p.z() - radius; z <= p.z() + radius; z += cellSize) {
-                    size_t hash = hashPosition(point3d(x,y,z));
-                    auto it = mapGrid.find(hash);
-                    if(it != mapGrid.end() && 
-                       it->second.isModified && 
-                       currentTime - it->second.lastModifiedTime < maxAge) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
-    }
-    
-    bool getCachedGain(Node* node, double maxAge, double& cachedGain, 
-                      std::map<double, int>& cachedYawVoxels) {
-        size_t hash = hashPosition(node->p);
-        auto it = nodeCache.find(hash);
-        
-        if(it != nodeCache.end()) {
-            double currentTime = ros::Time::now().toSec();
-            if(currentTime - it->second.timestamp < maxAge &&
-               isRegionUnchanged(node->p, dmax, maxAge)) {
-                cachedGain = it->second.gain;
-                cachedYawVoxels = it->second.yaw_num_voxels;
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    void updateCache(Node* node, double gain, 
-                    const std::map<double, int>& yawVoxels) {
-        size_t hash = hashPosition(node->p);
-        nodeCache[hash] = {
-            ros::Time::now().toSec(),
-            gain,
-            yawVoxels
-        };
-    }
-};
-
-// Add global gainCache instance
-static GainCache gainCache;
-
-void printGainCacheStats() {
-    std::cout << "\nGain Cache Performance:\n"
-              << "Cache hits: " << perfStats.cache_hits << "\n"
-              << "Cache misses: " << perfStats.cache_misses << "\n"
-              << "Hit rate: " << (double)perfStats.cache_hits / 
-                                (perfStats.cache_hits + perfStats.cache_misses) * 100 << "%\n"
-              << "Total gain calc time: " << perfStats.total_gain_calc_time << "s\n"
-              << std::endl;
-}
-
-
 
 std::vector<double> generate_yaws(int n){
 	std::vector<double> yaws;
@@ -213,6 +146,7 @@ Node* randomConfig(const OcTree& tree, bool allow_not_valid=false){
 	}
 
 	Node* nptr = new Node(p);
+	clearance_calculator(tree,nptr);
 
 	return nptr;
 }
@@ -252,7 +186,7 @@ Node* randomConfigBBX(const OcTree& tree, std::vector<double> &bbx){
 	}
 
 	Node* nptr = new Node(p);
-
+	clearance_calculator(tree,nptr);
 	return nptr;
 }
 
@@ -347,26 +281,10 @@ bool isInFOV(const OcTree& tree, point3d p, point3d u, double dmax){
 }
 
 double calculateUnknown(const OcTree& tree, Node* n, double dmax){
-	auto start = std::chrono::high_resolution_clock::now();
-    
-    // Try cache first
-    double cachedGain;
-    std::map<double, int> cachedYawVoxels;
-    if(gainCache.getCachedGain(n, 5, cachedGain, cachedYawVoxels)) {
-        perfStats.cache_hits++;
-        n->yaw_num_voxels = cachedYawVoxels;
-        return cachedGain;
-    }
-    
-    perfStats.cache_misses++;
-
-    // Early termination for out-of-bounds
-    if(n->p.z() < env_z_min || n->p.z() > env_z_max) {
-        return 0.0;
-    }
-
 	// Position:
 	point3d p = n->p;
+	dmax = 1*(n->thresh_high - 0.5);
+
 	// Possible range
 	double xmin, xmax, ymin, ymax, zmin, zmax;
 	xmin = p.x() - dmax;
@@ -448,11 +366,6 @@ double calculateUnknown(const OcTree& tree, Node* n, double dmax){
 	// cout << "Total Surface Frontier: " << count_total_surface_frontier << endl;
 	// cout << "+----------------------------+" << endl;
 	n->yaw_num_voxels = yaw_num_voxels;
-
-	gainCache.updateCache(n, count_total_unknown, n->yaw_num_voxels);
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    perfStats.total_gain_calc_time += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000.0;
 	return count_total_unknown;
 }
 
@@ -474,7 +387,6 @@ bool isNodeRequireUpdate(Node* n, std::vector<Node*> path, double& least_distanc
 	}
 	
 }
-
 
 // Ensure the vertical sensor range condition for node connection
 bool sensorRangeCondition(Node* n1, Node* n2){
@@ -530,7 +442,7 @@ PRM* buildRoadMap(OcTree &tree,
 				Node* nn = map->nearestNeighbor(n);
 				distance_to_nn = n->p.distance(nn->p);
 				// cout << "least distance" <<distance_to_nn << endl;
-				if (distance_to_nn < distance_thresh){
+				if (distance_to_nn < n->thresh_low){
 					++count_failure;
 					delete n;
 				}
@@ -601,7 +513,7 @@ PRM* buildRoadMap(OcTree &tree,
 					Node* nn = map->nearestNeighbor(n);
 					distance_to_nn = n->p.distance(nn->p);
 					// cout << "least distance: " <<distance_to_nn << endl;
-					if (distance_to_nn < distance_thresh){
+					if (distance_to_nn < n->thresh_low){
 						++count_failure2;
 						delete n;
 					}
@@ -628,11 +540,22 @@ PRM* buildRoadMap(OcTree &tree,
 		for (Node* nearest_neighbor: knn){
 			bool has_collision = checkCollision(tree, n, nearest_neighbor);
 			double distance_to_knn = n->p.distance(nearest_neighbor->p);
+			double high ;
+            double low ;
+            if(n->thresh_high >=nearest_neighbor->thresh_high){
+                high=1.3*(n->thresh_high);
+                low=nearest_neighbor->thresh_low;
+            }
+            else{
+                high=1.3*(nearest_neighbor->thresh_high);
+                low=n->thresh_low;
+
+            }
 			bool range_condition = sensorRangeCondition(n, nearest_neighbor) and sensorRangeCondition(nearest_neighbor, n);
 			// if (distance_to_knn < 0.8){
 			// 	cout << "bad node" << endl;
 			// }
-			if (has_collision == false and distance_to_knn < 1.5 and range_condition == true){
+			if (has_collision == false and distance_to_knn < high and distance_to_knn > low and range_condition == true){
 				n->adjNodes.insert(nearest_neighbor);
 				nearest_neighbor->adjNodes.insert(n); 
 			}
@@ -686,7 +609,44 @@ PRM* buildRoadMap(OcTree &tree,
 			n->update = false;
 		}
 		n->new_node = false;
+		/////new code 
+		if(n->thresh_high>1.8 and n->adjNodes.size()<25){
 
+		std::vector<Node*> knn = map->kNearestNeighbor(n, 25);
+
+		for (Node* nearest_neighbor: knn){
+			bool has_collision = checkCollision(tree, n, nearest_neighbor);
+			double distance_to_knn = n->p.distance(nearest_neighbor->p);
+			double high ;
+            double low ;
+            if(n->thresh_high >=nearest_neighbor->thresh_high){
+                high=1.3*(n->thresh_high);
+                low=nearest_neighbor->thresh_low;
+            }
+            else{
+                high=1.3*(nearest_neighbor->thresh_high);
+                low=n->thresh_low;
+
+            }
+			bool range_condition = sensorRangeCondition(n, nearest_neighbor) and sensorRangeCondition(nearest_neighbor, n);
+			// if (distance_to_knn < 0.8){
+			// 	cout << "bad node" << endl;
+			// }
+			if (has_collision == false and distance_to_knn < high and distance_to_knn > low and range_condition == true){
+				n->adjNodes.insert(nearest_neighbor);
+				nearest_neighbor->adjNodes.insert(n); 
+			}
+		}
+
+
+		if (n->adjNodes.size() != 0){
+			map->addRecord(n);
+			double num_voxels = calculateUnknown(tree, n, dmax);
+			n->num_voxels = num_voxels;
+		}
+
+		}
+		///till here
 		if (n->num_voxels>max_unknown){
 			max_unknown = n->num_voxels;
 		}

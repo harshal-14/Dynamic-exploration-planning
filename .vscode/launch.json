@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ROS: map_vis debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/root/catkin_ws/devel/lib/DEP/map_vis",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "/root/catkin_ws",
+            "environment": [
+                {
+                    "name": "ROS_MASTER_URI",
+                    "value": "http://localhost:11311"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

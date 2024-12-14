@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "catkin_make",
+            "type": "shell",
+            "command": "cd /root/catkin_ws && catkin_make -DCMAKE_BUILD_TYPE=Debug",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

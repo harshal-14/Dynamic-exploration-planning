@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(DEP)
+###for debugging
+set(CMAKE_BUILD_TYPE Debug)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -16,23 +18,6 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   voxblox_ros
 )
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(NLOPT nlopt)
-if(NOT NLOPT_FOUND)
-  message(WARNING "NLopt not found via pkg-config, trying alternative path")
-  # Check the custom build location first
-  if(EXISTS "/root/nlopt-2.7.1/build/libnlopt.so")
-    set(NLOPT_LIBRARIES "/root/nlopt-2.7.1/build/libnlopt.so")
-    set(NLOPT_INCLUDE_DIRS "/root/nlopt-2.7.1/include")
-  # Fallback to the original path
-  elseif(EXISTS "/home/zhefan/Desktop/nlopt/build/libnlopt.so")
-    set(NLOPT_LIBRARIES "/home/zhefan/Desktop/nlopt/build/libnlopt.so")
-    set(NLOPT_INCLUDE_DIRS "/home/zhefan/Desktop/nlopt/build")
-  else()
-    message(FATAL_ERROR "NLopt library not found in expected locations")
-  endif()
-endif()
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -135,13 +120,26 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+#include_directories(
+#  include
+# ${catkin_INCLUDE_DIRS}
+# "/opt/gurobi902/linux64/include"
+#  "/home/zhefan/Desktop/nlopt/build"
+#)
+
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   "/opt/gurobi902/linux64/include"
-  # "/home/zhefan/Desktop/nlopt/build"
-  ${NLOPT_INCLUDE_DIRS}
+  "/usr/local/lib"
 )
+
+link_directories(
+  "/usr/local/lib"
+)
+
+
+
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -182,9 +180,12 @@ add_dependencies(map_vis ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_T
 # )
 # target_link_libraries(test_kdtree_DEP ${catkin_LIBRARIES})
 # target_link_libraries(test_prm ${catkin_LIBRARIES})
+#target_link_libraries(map_vis ${catkin_LIBRARIES} 
+						#"/home/zhefan/Desktop/nlopt/build/libnlopt.so")
 target_link_libraries(map_vis ${catkin_LIBRARIES} 
-						# "/home/zhefan/Desktop/nlopt/build/libnlopt.so")
-            ${NLOPT_LIBRARIES})
+						nlopt)
+
+						
 # target_link_libraries(test_tsdf ${catkin_LIBRARIES} 
 #                        "/opt/gurobi902/linux64/lib/libgurobi_c++.a"
 #                        "/opt/gurobi902/linux64/lib/libgurobi90.so")

@@ -91,6 +91,9 @@ def callback(all_states, goal):
 	rospy.loginfo("dyaw: %s", dyaw)
 	rotation_finish = abs(dyaw) < 0.06
 	if (reach):
+		rospy.loginfo("Goal reached! Goal Position:")
+                rospy.loginfo("x: %f, y: %f, z: %f", cx, cy, cz)
+
 		if (not rotation_finish):
 			target_twist.linear.x = 0
 			target_twist.linear.y = 0

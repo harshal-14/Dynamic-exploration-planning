@@ -25,6 +25,9 @@ typedef struct Node{
 	bool update;         // if we need to reevaluate the info gain
 	bool new_node; 		 // if the node is newly added
 	std::unordered_set<Node*> adjNodes;
+	double thresh_high;
+	double thresh_low;
+	double weight;
 	Node (){}
 	Node(point3d _p){
 		p = _p;
@@ -46,7 +49,8 @@ struct CompareNode{
 
 struct GainCompareNode{
 	bool operator()(Node* n1, Node* n2){
-		return n1->num_voxels < n2->num_voxels;
+		
+		return ((n1->weight)*n1->num_voxels) < ((n2->weight)*n2->num_voxels);
 	}
 };
 //======================================================================
@@ -55,13 +59,13 @@ struct GainCompareNode{
 //===================Class Declaration==================================
 typedef class KDTree{
 private:
-	int size;
+	//int size;
 	Node* root;
 	// std::vector<Node*> goal_nodes;
 	std::vector<Node*> not_target;
 	std::priority_queue<Node*, std::vector<Node*>, GainCompareNode> goal_nodes;
 	std::vector<Node*> record;
-	int total_num_unknown;
+	//int total_num_unknown;
 	int max_unknown;
 public:
 	KDTree();
@@ -85,7 +89,9 @@ public:
 	int getTotalUnknown();
 	void setMaxUnknown(int _max_unknown);
 	int getMaxUnknown();
-	void clear();   // empty tree
+	void clear(); 
+	int size;  // empty tree
+	int total_num_unknown;
 } PRM;
 
 //======================================================================

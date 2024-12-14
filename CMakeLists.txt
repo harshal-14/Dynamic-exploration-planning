@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(DEP)
-###for debugging
-set(CMAKE_BUILD_TYPE Debug)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -120,26 +118,12 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-#include_directories(
-#  include
-# ${catkin_INCLUDE_DIRS}
-# "/opt/gurobi902/linux64/include"
-#  "/home/zhefan/Desktop/nlopt/build"
-#)
-
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   "/opt/gurobi902/linux64/include"
-  "/usr/local/lib"
+  "/home/zhefan/Desktop/nlopt/build"
 )
-
-link_directories(
-  "/usr/local/lib"
-)
-
-
-
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -180,12 +164,8 @@ add_dependencies(map_vis ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_T
 # )
 # target_link_libraries(test_kdtree_DEP ${catkin_LIBRARIES})
 # target_link_libraries(test_prm ${catkin_LIBRARIES})
-#target_link_libraries(map_vis ${catkin_LIBRARIES} 
-						#"/home/zhefan/Desktop/nlopt/build/libnlopt.so")
 target_link_libraries(map_vis ${catkin_LIBRARIES} 
-						nlopt)
-
-						
+						"/home/zhefan/Desktop/nlopt/build/libnlopt.so")
 # target_link_libraries(test_tsdf ${catkin_LIBRARIES} 
 #                        "/opt/gurobi902/linux64/lib/libgurobi_c++.a"
 #                        "/opt/gurobi902/linux64/lib/libgurobi90.so")

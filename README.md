@@ -224,6 +224,9 @@ To visualize the exploration process, below are the ros topics you need to add i
 - `/occupied_vis_array` (Optional): The voxel map generated from octomap_server.
 - `/map_vis_array`: This is the incremental PRM mentioned in the paper.
 - `/path_vis_array`: The generated path from the DEP planner.
+- `/closebound_vis_array`: Collision line (only for Narrow Space Biased PRM).
+- `/inner_map_vis_array`: Child map in narrow space (only for Narrow Space Biased PRM).
+  - `/edge_vis_array`: entry nodes  in narrow space (only for Narrow Space Biased PRM).
 
 # Restricting the Exploration Range
 Sometimes, you may want to explore a confined space (defined by a cubic). In order to achieve that, simply modify the `include/env.h` file to change the corresponding dimension of the desired space and then run `catkin_make` in `~/catkin_ws`.

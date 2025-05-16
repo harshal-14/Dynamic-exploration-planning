@@ -1,7 +1,7 @@
 # DynaPRM for Robot Exploration
 
 This repo contains the implementation of Dynamic Environment Planner (DEP) which aims at robotic exploration in dynamic and unknown environments in 
-[ROS](https://www.ros.org/) and [Gazebo](http://gazebosim.org/). This work is adapted from this paper: https://ieeexplore.ieee.org/document/9362184. Alongwith re-implementation this project provide two extensions - 1. Spars RoadMap 2.Narrow Biased Planner
+[ROS](https://www.ros.org/) and [Gazebo](http://gazebosim.org/). This work is adapted from this paper: https://ieeexplore.ieee.org/document/9362184. Alongwith re-implementation of the reseatch paper this project provide two extensions - 1. Spars RoadMap 2.Narrow Biased Planner
 
 <img src="https://user-images.githubusercontent.com/55560905/111251884-77929700-85e6-11eb-8c98-3a28ba0d06d5.gif" alt="cafe_faster" width="278" height="180"><img src="https://user-images.githubusercontent.com/55560905/111250037-09000a00-85e3-11eb-9c04-7b81c4badc74.gif" alt="maze_faster" width="270" height="180"><img src="https://user-images.githubusercontent.com/55560905/111252221-03a4be80-85e7-11eb-8fcc-cab48a055426.gif" alt="office_faster" width="278" height="180">
 
